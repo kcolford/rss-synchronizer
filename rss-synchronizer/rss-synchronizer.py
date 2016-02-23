@@ -96,6 +96,10 @@ class RSSAggregator:
         date = int(time.mktime(rfc822.parsedate(date)))
         if not self.is_recent(source_id, date):
             return
+        with self.conn as cursor:
+            cursor.execute("""
+            UPDATE src_time SET time = %s
+            WHERE source_id = %s""", (date, source_id))
         body = it.find('description').text
         link = it.find('link').text
         message = EmailMessage(htmlize(body, link), 'html')
