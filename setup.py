@@ -18,7 +18,7 @@ requirements = [
     # TODO: put package requirements here
     'lxml',
     'pycurl',
-    'cymysql',
+    'pymysql',
 ]
 
 test_requirements = [
