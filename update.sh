@@ -1,6 +1,7 @@
 #!/bin/sh
 
+cd `dirname $0`
 git add -A
 git commit
 git push
-sudo `dirname $0`/setup.py install
+sudo ./setup.py install
