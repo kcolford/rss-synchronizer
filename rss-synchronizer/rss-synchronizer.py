@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """Synchronize RSS feeds and send emails.
@@ -30,6 +31,8 @@ class RSSAggregator:
   user = 'rss-config'
   passwd = 'todo'
   database = 'rss'
+
+  __slots__ = ['config', 'smtp', 'conn', 'feed_name', 'current_url']
 
   def __init__(self):
     
@@ -74,6 +77,8 @@ class RSSAggregator:
       FROM sources WHERE feed_id = %s""", [feed_id])
       for source_id, url, category in cursor:
         assert url is not None
+        log.debug('checking source at %s', url)
+        self.current_url = url
         try:
           data = fetch_url(url)
         except:
@@ -94,16 +99,16 @@ class RSSAggregator:
             log.error('error while processing %s item\n%s', url,
                       etree.tostring(it))
             continue
-          with self.conn as cursor:
-            cursor.execute("""
-            UPDATE src_time SET time = %s
-            WHERE source_id = %s""", [time.time(), source_id])
 
   def process_item(self, source_id, it):
     """Process the item we are looking at."""
 
-    date = time.mktime(rfc822.parsedate(it.find('pubDate').text))
-    if not self.is_recent(source_id, date):
+    it_time = time.mktime(rfc822.parsedate(it.find('pubDate').text))
+    last_time = self.last_updated(source_id)
+    if it_time <= last_time:
+      log.debug("%s's entry %s is too old (%s < %s)", self.current_url, 
+                it.find('title').text, time.ctime(it_time),
+                time.ctime(last_time))
       return
     body = it.find('description').text
     link = it.find('link').text
@@ -112,30 +117,34 @@ class RSSAggregator:
     msg['From'] = self.config.email_addr
     msg['To'] = self.to
     self.smtp.sendmail(msg['From'], msg['To'], msg.as_string())
+    log.info('sent RSS update of %s to %s', msg['Subject'], msg['To'])
+    with self.conn as cursor:
+      cursor.execute("""
+      UPDATE src_time SET time = %s
+      WHERE source_id = %s""", [it_time, source_id])
+      log.debug('updated MySQL record for source update time')
     
-  def is_recent(self, source_id, date):
-    """Return True if the last updated time for source_id precedes date.
-    
-    """
+  def last_updated(self, source_id):
+    """Return the last updated time for source_id."""
 
     with self.conn as cursor:
       cursor.execute("""
       SELECT time
       FROM src_time WHERE source_id = %s""", [source_id])
       try:
-        sdate = next(iter(cursor))[0]
+        t = next(iter(cursor))[0]
       except StopIteration:
+        t = time.time()
         with self.conn as cursor:
           cursor.execute("""
           INSERT INTO src_time (source_id, time)
-          VALUES (%s,%s)""", [source_id, time.time()])
-        return False
-    return sdate < date
+          VALUES (%s,%s)""", [source_id, t])
+    return t
 
 def has_category(it, category):
   """Return True iff `it` has category `category`."""
 
-  return category in [c.text for c in it.findall('category')]
+  return category in [None] + [c.text for c in it.findall('category')]
 
 def fetch_url(url):
   """Return the content found at url."""
@@ -169,15 +178,18 @@ def wrap_logging_func(fn):
   @functools.wraps(fn)
   def wrapped(fmt, *args, **kwargs):
     fmt += '\n%s'
+    args = list(args)
     args.append(traceback.format_exc())
     fn(fmt, *args, **kwargs)
 
   return wrapped
 
 def main():
+  logging.basicConfig()
+  curl.global_init(curl.GLOBAL_DEFAULT)
   RSSAggregator()
+  curl.global_cleanup()
 
-logging.basicConfig()
 log = logging.getLogger('rss')
 log.error = wrap_logging_func(log.error)
 
