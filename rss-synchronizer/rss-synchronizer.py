@@ -102,7 +102,7 @@ class RSSAggregator:
             WHERE source_id = %s""", (date, source_id))
         body = it.find('description').text
         link = it.find('link').text
-        message = EmailMessage(htmlize(body, link), 'html')
+        message = EmailMessage(htmlize(body, link), 'html', 'utf-8')
         message['Subject'] = it.find('title').text
         message['From'] = self.config.email_addr
         with self.conn as cursor:
