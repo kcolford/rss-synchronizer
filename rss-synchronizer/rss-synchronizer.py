@@ -41,6 +41,11 @@ class RSSAggregator:
         self.smtp.starttls()
         self.smtp.login(self.config.email_user, self.config.email_passwd)
 
+        self.curl = curl.CurlShare()
+        self.curl.setopt(curl.ENCODING, '')
+        self.curl.setopt(curl.USERAGENT, 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:44.0) Gecko/20100101 Firefox/44.0')
+        self.curl.setopt(curl.FAILONERROR, True)
+
         self.process_feeds()
 
     def process_feeds(self):
@@ -49,6 +54,12 @@ class RSSAggregator:
         with self.conn as cursor:
             cursor.execute("""SELECT feed_id, name FROM feeds""")
             for feed_id, name in cursor:
+                with self.conn as cursor:
+                    cursor.execute("""
+                    SELECT email_address 
+                    FROM recipients
+                    WHERE feed_id = %s""", [feed_id])
+                    self.to = ', '.join(map(lambda x: x[0], cursor))
                 self.feed_name = name
                 self.process_feed(feed_id)
 
@@ -58,7 +69,7 @@ class RSSAggregator:
         with self.conn as cursor:
             cursor.execute("""
             SELECT source_id, url, category
-            FROM sources WHERE feed_id = %s""", (feed_id,))
+            FROM sources WHERE feed_id = %s""", [feed_id])
             for source_id, url, category in cursor:
                 try:
                     data = fetch_url(url)
@@ -72,21 +83,23 @@ class RSSAggregator:
                     continue
                 ch = d.find('channel')
                 for it in ch.findall('item'):
-                    if category is not None:
-                        if not self.check_category(it, category):
-                            continue
+                    if not self.has_category(it, category):
+                        continue
                     try:
                         self.process_item(feed_id, source_id, it)
                     except:
                         log.error('error while processing %s item\n%s',
                                   url,
                                   etree.tostring(it))
-                        raise
+                        continue
+                    with self.conn as cursor:
+                        cursor.execute("""
+                        UPDATE src_time SET time = %s
+                        WHERE source_id = %s""", [time.time(), source_id])
 
-    def check_category(self, it, category):
+    def has_category(self, it, category):
         """Return True iff `it` has category `category`."""
 
-        assert category is not None
         return category in [c.text for c in it.findall('category')]
 
     def process_item(self, feed_id, source_id, it):
@@ -96,73 +109,62 @@ class RSSAggregator:
         date = int(time.mktime(rfc822.parsedate(date)))
         if not self.is_recent(source_id, date):
             return
-        with self.conn as cursor:
-            cursor.execute("""
-            UPDATE src_time SET time = %s
-            WHERE source_id = %s""", (date, source_id))
         body = it.find('description').text
         link = it.find('link').text
-        message = EmailMessage(htmlize(body, link), 'html', 'utf-8')
+        message = EmailMessage(self.htmlize(body, link), 'html', 'utf-8')
         message['Subject'] = it.find('title').text
         message['From'] = self.config.email_addr
-        with self.conn as cursor:
-            cursor.execute("""
-            SELECT email_address
-            FROM recipients WHERE feed_id = %s""", [feed_id])
-            message['To'] = ', '.join(map(lambda x: x[0], cursor))
+        message['To'] = self.to
         self.smtp.sendmail(message['From'], message['To'],
                            message.as_string())
         
     def is_recent(self, source_id, date):
         """Return True if the last updated time for source_id precedes date."""
 
-        assert isinstance(date, int)
-        sdate = None
+        date = int(date)
         with self.conn as cursor:
             cursor.execute("""
             SELECT time
             FROM src_time WHERE source_id = %s""", [source_id])
             try:
                 sdate = next(iter(cursor))[0]
-                assert isinstance(sdate, int)
             except StopIteration:
-                pass
-        if sdate is not None:
-            return sdate < date
-        else:
-            with self.conn as cursor:
-                cursor.execute("""
-                INSERT INTO src_time (source_id, time)
-                VALUES (%s,%s)""", [source_id, time.time()])
-            return False
+                with self.conn as cursor:
+                    cursor.execute("""
+                    INSERT INTO src_time (source_id, time)
+                    VALUES (%s,%s)""", [source_id, time.time()])
+                return False
+        assert isinstance(sdate, int)
+        return sdate < date
 
-def fetch_url(url):
-    """Return the content found at url."""
+    def fetch_url(self, url):
+        """Return the content found at url."""
+        
+        data = []
+        c = curl.Curl()
+        c.setopt(curl.SHARE, self.curl)
+        c.setopt(curl.WRITEFUNCTION, data.append)
+        c.setopt(curl.URL, url)
+        c.perform()
+        return ''.join(data)
 
-    data = []
-    c = curl.Curl()
-    c.setopt(curl.USERAGENT, 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:44.0) Gecko/20100101 Firefox/44.0')
-    c.setopt(curl.ENCODING, '')
-    c.setopt(curl.WRITEFUNCTION, data.append)
-    c.setopt(curl.URL, url)
-    c.perform()
-    return ''.join(data)
-
-def htmlize(body, link):
-    """Convert a body and a link into an html message."""
-
-    return ("""<!DOCTYPE html>
-    <html>
-    <head></head>
-    <body>
-    <p>""" + body + """</p>
-    <p><a href=""" + link + """>Click for more.</a></p>
-    </body>
-    </html>
-    """)
+    def htmlize(self, body, link):
+        """Convert a body and a link into an html message."""
+        
+        return ("""<!DOCTYPE html>
+        <html>
+        <head></head>
+        <body>
+        <p>""" + body + """</p>
+        <p><a href=""" + link + """>Click for more.</a></p>
+        </body>
+        </html>
+        """)
 
 def main():
+    curl.global_init(curl.GLOBAL_DEFAULT)
     RSSAggregator()
+    curl.global_cleanup()
 
 logging.basicConfig()
 log = logging.getLogger('rss')
