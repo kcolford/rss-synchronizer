@@ -16,6 +16,8 @@ import pymysql as mysql
 import logging
 import time
 import sys
+import traceback
+import functools
 
 class RSSAggregator:
     """Aggragates RSS feeds according to database configuration."""
@@ -40,8 +42,6 @@ class RSSAggregator:
         self.smtp = smtplib.SMTP('localhost')
         self.smtp.starttls()
         self.smtp.login(self.config.email_user, self.config.email_passwd)
-
-        self.curl = curl.CurlShare()
 
         self.process_feeds()
 
@@ -68,6 +68,7 @@ class RSSAggregator:
             SELECT source_id, url, category
             FROM sources WHERE feed_id = %s""", [feed_id])
             for source_id, url, category in cursor:
+                assert url is not None
                 try:
                     data = fetch_url(url)
                 except:
@@ -80,24 +81,18 @@ class RSSAggregator:
                     continue
                 ch = d.find('channel')
                 for it in ch.findall('item'):
-                    if not self.has_category(it, category):
+                    if not has_category(it, category):
                         continue
                     try:
                         self.process_item(feed_id, source_id, it)
                     except:
-                        log.error('error while processing %s item\n%s',
-                                  url,
+                        log.error('error while processing %s item\n%s', url,
                                   etree.tostring(it))
                         continue
                     with self.conn as cursor:
                         cursor.execute("""
                         UPDATE src_time SET time = %s
                         WHERE source_id = %s""", [time.time(), source_id])
-
-    def has_category(self, it, category):
-        """Return True iff `it` has category `category`."""
-
-        return category in [c.text for c in it.findall('category')]
 
     def process_item(self, feed_id, source_id, it):
         """Process the item we are looking at."""
@@ -108,7 +103,7 @@ class RSSAggregator:
             return
         body = it.find('description').text
         link = it.find('link').text
-        message = EmailMessage(self.htmlize(body, link), 'html', 'utf-8')
+        message = EmailMessage(htmlize(body, link), 'html', 'utf-8')
         message['Subject'] = it.find('title').text
         message['From'] = self.config.email_addr
         message['To'] = self.to
@@ -134,32 +129,55 @@ class RSSAggregator:
         assert isinstance(sdate, int)
         return sdate < date
 
-    def fetch_url(self, url):
-        """Return the content found at url."""
-        
-        data = []
-        c = curl.Curl()
-        c.setopt(curl.SHARE, self.curl)
-        c.setopt(curl.ENCODING, '')
-        c.setopt(curl.USERAGENT, 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:44.0) Gecko/20100101 Firefox/44.0')
-        c.setopt(curl.FAILONERROR, True)
-        c.setopt(curl.WRITEFUNCTION, data.append)
-        c.setopt(curl.URL, url)
-        c.perform()
-        return ''.join(data)
+def has_category(it, category):
+    """Return True iff `it` has category `category`."""
 
-    def htmlize(self, body, link):
-        """Convert a body and a link into an html message."""
-        
-        return ("""<!DOCTYPE html>
-        <html>
-        <head></head>
-        <body>
-        <p>""" + body + """</p>
-        <p><a href=""" + link + """>Click for more.</a></p>
-        </body>
-        </html>
-        """)
+    return category in [c.text for c in it.findall('category')]
+
+
+
+def fetch_url(url):
+    """Return the content found at url."""
+    
+    data = []
+    c = curl.Curl()
+    c.setopt(curl.ENCODING, '')
+    c.setopt(curl.USERAGENT, 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:44.0) Gecko/20100101 Firefox/44.0')
+    c.setopt(curl.FAILONERROR, True)
+    c.setopt(curl.WRITEFUNCTION, data.append)
+    c.setopt(curl.URL, url)
+    c.perform()
+    return ''.join(data)
+    
+def htmlize(body, link):
+    """Convert a body and a link into an html message."""
+    
+    return ("""<!DOCTYPE html>
+    <html>
+    <head></head>
+    <body>
+    <p>""" + body + """</p>
+    <p><a href=""" + link + """>Click for more.</a></p>
+    </body>
+    </html>
+    """)
+
+def wrap_logging_func(fn):
+    """Wrap a logging function to display tracebacks."""
+
+    @functools.wraps(fn)
+    def wrapped(fmt, *args, **kwargs):
+        fmt += '\n%s'
+        args.append(traceback.format_exc())
+        fn(fmt, *args, **kwargs)
+
+    return wrapped
+
+def error(frmt, *args, **kwargs):
+    """Print an error message and traceback."""
+
+    logger.error('%s\n' + frmt, traceback.format_exc(),
+                 *args, **kwargs)
 
 def main():
     curl.global_init(curl.GLOBAL_DEFAULT)
@@ -168,6 +186,7 @@ def main():
 
 logging.basicConfig()
 log = logging.getLogger('rss')
+log.error = wrap_logging_func(log.error)
 etree.use_global_python_log(etree.PyErrorLog('rss.xmlparser'))
 
 if __name__ == '__main__':
