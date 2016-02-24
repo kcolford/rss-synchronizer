@@ -155,7 +155,8 @@ def htmlize(body, link):
     <html>
     <head></head>
     <body>
-    """ + '<a href="' + link + '">' + body + '</a>' + """
+    <p>""" + body + """</p>
+    <p><a href=""" + link + """>Click for more.</a></p>
     </body>
     </html>
     """)
