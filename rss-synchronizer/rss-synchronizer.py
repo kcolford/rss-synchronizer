@@ -110,7 +110,8 @@ class RSSAggregator:
             SELECT email_address
             FROM recipients WHERE feed_id = %s""", [feed_id])
             message['To'] = ', '.join(map(lambda x: x[0], cursor))
-        self.smtp.sendmail(message['From'], message['To'], message)
+        self.smtp.sendmail(message['From'], message['To'],
+                           message.as_string())
         
     def is_recent(self, source_id, date):
         """Return True if the last updated time for source_id precedes date."""
