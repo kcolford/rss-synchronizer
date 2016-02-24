@@ -42,9 +42,6 @@ class RSSAggregator:
         self.smtp.login(self.config.email_user, self.config.email_passwd)
 
         self.curl = curl.CurlShare()
-        self.curl.setopt(curl.ENCODING, '')
-        self.curl.setopt(curl.USERAGENT, 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:44.0) Gecko/20100101 Firefox/44.0')
-        self.curl.setopt(curl.FAILONERROR, True)
 
         self.process_feeds()
 
@@ -143,6 +140,9 @@ class RSSAggregator:
         data = []
         c = curl.Curl()
         c.setopt(curl.SHARE, self.curl)
+        c.setopt(curl.ENCODING, '')
+        c.setopt(curl.USERAGENT, 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:44.0) Gecko/20100101 Firefox/44.0')
+        c.setopt(curl.FAILONERROR, True)
         c.setopt(curl.WRITEFUNCTION, data.append)
         c.setopt(curl.URL, url)
         c.perform()
