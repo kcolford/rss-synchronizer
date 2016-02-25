@@ -7,6 +7,7 @@ Configuration data is stored in local MySQL database.
 
 """
 
+import os
 import collections
 import rfc822
 import smtplib
@@ -66,21 +67,36 @@ def wrap_logging_func(fn):
 
   @functools.wraps(fn)
   def wrapped(fmt, *args, **kwargs):
-    fmt += '\n%s'
-    args = list(args)
-    args.append(traceback.format_exc())
+    trace = traceback.format_exc()
+    if trace:
+      fmt += '\n%s'
+      args = list(args)
+      args.append(traceback.format_exc())
     fn(fmt, *args, **kwargs)
 
   return wrapped
 
-def aggregate():
+def make_message(channel, item):
+  """Return an email message out of the item in channel."""
+
+  msg = EmailMessage(("""<!DOCTYPE html>
+  <html>
+  <head></head>
+  <body>
+  <p>""" + item.find('description').text + """</p>
+  <p><a href=""" + item.find('link').text + """>Click for more.</a></p>
+  </body>
+  </html>
+  """), 'html', 'utf-8')
+  msg['Subject'] = '[%s] %s' % (channel.find('title').text,
+                                item.find('title').text)
+  return msg
+
+def aggregate(send_emails=True, **kwargs):
   """Aggregate all configured feeds and send out updates."""
 
   # establish a connection
-  connection = mysql.connect(host='localhost',
-                             user='rss-config',
-                             passwd='todo',
-                             db='rss')
+  connection = mysql.connect(**kwargs)
 
   # load configuration data
   config = {}
@@ -97,23 +113,29 @@ def aggregate():
   # determine what sources have been updated
   updated_sources = {}
   with connection as cursor:
-    cursor.execute("""SELECT source_id, url, category FROM view_sources""")
+    cursor.execute("""
+    SELECT source_id, url, category
+    FROM view_sources""")
     for source_id, url, category in cursor:
       # fetch last update time of source
       with connection as cursor:
-        cursor.execute("""SELECT time FROM src_time WHERE source_id = %s""",
-                       [source_id])
+        cursor.execute("""
+        SELECT time
+        FROM src_time
+        WHERE source_id = %s""", [source_id])
         try:
           last_update_time = next(iter(cursor))[0]
         except StopIteration:
           last_update_time = time.time()
-          cursor.execute("""INSERT INTO src_time (source_id, time)
+          cursor.execute("""
+          INSERT INTO src_time (source_id, time)
           VALUES (%s, %s)""", [source_id, last_update_time])
 
       # fetch the email addresses to send to
       with connection as cursor:
         cursor.execute("""
-        SELECT email_address FROM view_source_recipients
+        SELECT email_address
+        FROM view_source_recipients
         WHERE source_id = %s""", [source_id])
         recipients = [r[0] for r in cursor]
       
@@ -127,10 +149,10 @@ def aggregate():
       except: continue
       log.debug('parsed %s', url)
 
-      # collect values
+      # collect updates
       channel = rss.find('channel')
-      title = channel.find('title').text
       itemstosend = []
+      max_pubtime = last_update_time
       for item in channel.findall('item'):
         if not has_category(item, category):
           continue
@@ -138,20 +160,43 @@ def aggregate():
         item_pubtime = time.mktime(rfc822.parsedate(item_pubtime))
         if item_pubtime <= last_update_time:
           continue
-        body = item.find('description').text
-        link = item.find('link').text
-        msg = EmailMessage(htmlize(body, link), 'html', 'utf-8')
-        msg['Subject'] = '[%s] %s' % (title, item.find('title').text)
-        msg['From'] = config['email_addr']
-        for r in recipients:
-          msg['To'] = r
-          smtp.sendmail(msg['From'], msg['To'], msg.as_string())
+        max_pubtime = max(max_pubtime, item_pubtime)
+        itemstosend.append(make_message(channel, item))
         
+      # don't continue if there's not updates to send
+      if not itemstosend:
+        continue
+
+      # only send if the environment variable allows it
+      if send_emails:
+        # stop if there are too many updates, this may be the result of
+        # an error
+        if len(itemstosend) > 10:
+          log.error('number of updates (%s) exceeds limit (10)',
+                    len(itemstosend))
+          continue
+
+        # send out updates
+        for msg in itemstosend:
+          msg['From'] = config['email_addr']
+          for r in recipients:
+            msg['To'] = r
+            smtp.sendmail(msg['From'], msg['To'], msg.as_string())
+
+      # update the last update times for this run
+      with connection as cursor:
+        cursor.execute("""
+        UPDATE src_time SET time = %s
+        WHERE source_id = %s""", [max_pubtime, source_id])
 
 def main():
   logging.basicConfig()
   curl.global_init(curl.GLOBAL_DEFAULT)
-  aggregate()
+  aggregate(os.getenv('RSS_SEND_EMAILS', 'y') == 'y',
+            host=os.getenv('RSS_MYSQL_HOST', 'localhost'),
+            user=os.getenv('RSS_MYSQL_USER', 'rss-config'),
+            password=os.getenv('RSS_MYSQL_PASSWORD'),
+            database=os.getenv('RSS_MYSQL_DATABASE', 'rss'))
   curl.global_cleanup()
 
 log = logging.getLogger('rss')
