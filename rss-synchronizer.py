@@ -20,11 +20,8 @@ import functools
 
 import pymysql as mysql
 import pycurl as curl
-try:
-  import lxml.etree as etree
-  etree.use_global_python_log(etree.PyErrorLog('rss.xmlparser'))
-except ImportError:
-  import xml.etree.ElementTree as etree
+import lxml.etree as etree
+etree.use_global_python_log(etree.PyErrorLog('rss.xmlparser'))
 
 def has_category(it, category):
   """Return True iff `it` has category `category`."""
@@ -38,7 +35,6 @@ def fetch_url(url):
   c = curl.Curl()
   c.setopt(curl.ENCODING, '')
   c.setopt(curl.USERAGENT, 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:44.0) Gecko/20100101 Firefox/44.0')
-  c.setopt(curl.FAILONERROR, True)
   c.setopt(curl.WRITEFUNCTION, data.append)
   c.setopt(curl.URL, url)
   try:
@@ -49,33 +45,6 @@ def fetch_url(url):
   log.debug('successfully loaded %s', url)
   return ''.join(data)
   
-def htmlize(body, link):
-  """Convert a body and a link into an html message."""
-  
-  return ("""<!DOCTYPE html>
-  <html>
-  <head></head>
-  <body>
-  <p>""" + body + """</p>
-  <p><a href=""" + link + """>Click for more.</a></p>
-  </body>
-  </html>
-  """)
-
-def wrap_logging_func(fn):
-  """Wrap a logging function to display tracebacks."""
-
-  @functools.wraps(fn)
-  def wrapped(fmt, *args, **kwargs):
-    trace = traceback.format_exc()
-    if trace:
-      fmt += '\n%s'
-      args = list(args)
-      args.append(traceback.format_exc())
-    fn(fmt, *args, **kwargs)
-
-  return wrapped
-
 def make_message(channel, item):
   """Return an email message out of the item in channel."""
 
@@ -140,13 +109,11 @@ def aggregate(send_emails=True, **kwargs):
         recipients = [r[0] for r in cursor]
       
       # load data from url
-      try:    data = fetch_url(url)
-      except: continue
+      data = fetch_url(url)
       log.debug('fetched %s', url)
 
       # parse the data
-      try:    rss = etree.fromstring(data)
-      except: continue
+      rss = etree.fromstring(data)
       log.debug('parsed %s', url)
 
       # collect updates
@@ -192,15 +159,17 @@ def aggregate(send_emails=True, **kwargs):
 def main():
   logging.basicConfig()
   curl.global_init(curl.GLOBAL_DEFAULT)
-  aggregate(os.getenv('RSS_SEND_EMAILS', 'y') == 'y',
+  password = os.getenv('RSS_MYSQL_PASSWORD')
+  if not password and os.getenv('RSS_MYSQL_PASS_FILE'):
+    password = open(os.getenv('RSS_MYSQL_PASS_FILE'), 'r').read()
+  aggregate(send_emails=os.getenv('RSS_SEND_EMAILS', 'y') == 'y',
             host=os.getenv('RSS_MYSQL_HOST', 'localhost'),
             user=os.getenv('RSS_MYSQL_USER', 'rss-config'),
-            password=os.getenv('RSS_MYSQL_PASSWORD'),
+            password=password,
             database=os.getenv('RSS_MYSQL_DATABASE', 'rss'))
   curl.global_cleanup()
 
 log = logging.getLogger('rss')
-log.error = wrap_logging_func(log.error)
 
 if __name__ == '__main__':
   main()
