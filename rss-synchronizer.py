@@ -31,18 +31,22 @@ def has_category(it, category):
 def fetch_url(url):
   """Return the content found at url."""
   
-  data = []
+  # build a standard curl object
   c = curl.Curl()
   c.setopt(curl.ENCODING, '')
   c.setopt(curl.USERAGENT, 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:44.0) Gecko/20100101 Firefox/44.0')
+  c.setopt(curl.FOLLOWLOCATION, True)
+  c.setopt(curl.FAILONERROR, True)
+  c.setopt(curl.VERBOSE, False)
+  c.setopt(curl.NOPROGRESS, True)
+
+  # pass interesting parameters to it
+  data = []
   c.setopt(curl.WRITEFUNCTION, data.append)
   c.setopt(curl.URL, url)
-  try:
-    c.perform()
-  except:
-    log.error('failed to load reasource at %s', url)
-    raise
-  log.debug('successfully loaded %s', url)
+  c.perform()
+
+  assert data
   return ''.join(data)
   
 def make_message(channel, item):
@@ -61,7 +65,9 @@ def make_message(channel, item):
                                 item.find('title').text)
   return msg
 
-def aggregate(send_emails=True, **kwargs):
+def aggregate(send_emails=True,
+              max_updates=10,
+              **kwargs):
   """Aggregate all configured feeds and send out updates."""
 
   # establish a connection
@@ -109,12 +115,18 @@ def aggregate(send_emails=True, **kwargs):
         recipients = [r[0] for r in cursor]
       
       # load data from url
-      data = fetch_url(url)
-      log.debug('fetched %s', url)
+      try:
+        data = fetch_url(url)
+      except:
+        log.error('failed to fetch reasource at %s', url)
+        continue
 
       # parse the data
-      rss = etree.fromstring(data)
-      log.debug('parsed %s', url)
+      try:
+        rss = etree.fromstring(data)
+      except:
+        log.error('failed to parse reasource at %s', url)
+        continue
 
       # collect updates
       channel = rss.find('channel')
@@ -138,9 +150,9 @@ def aggregate(send_emails=True, **kwargs):
       if send_emails:
         # stop if there are too many updates, this may be the result of
         # an error
-        if len(itemstosend) > 10:
-          log.error('number of updates (%s) exceeds limit (10)',
-                    len(itemstosend))
+        if len(itemstosend) > max_updates:
+          log.error('number of updates (%s) exceeds limit (%s)',
+                    len(itemstosend), max_updates)
           continue
 
         # send out updates
