@@ -1,9 +1,6 @@
 all:
 
 install:
-	pip install -r requires.txt
+	apt-get install `cat apt.req`
+	pip install `cat pip.req`
 	install rss-synchronizer.py /bin/rss-synchronizer
-
-uninstall:
-	pip uninstall -r requires.txt
-	rm /bin/rss-synchronizer
