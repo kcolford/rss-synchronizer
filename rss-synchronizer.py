@@ -52,15 +52,23 @@ def fetch_url(url):
 def make_message(channel, item):
   """Return an email message out of the item in channel."""
 
-  msg = EmailMessage(("""<!DOCTYPE html>
-  <html>
-  <head></head>
-  <body>
-  <p>""" + item.find('description').text + """</p>
-  <p><a href=""" + item.find('link').text + """>Click for more.</a></p>
-  </body>
-  </html>
-  """), 'html', 'utf-8')
+  def fmt(template, arg):
+    arg = item.find(arg).text
+    return (template % arg) if arg else ''
+
+  msg = EmailMessage(
+    (
+      """<!DOCTYPE html>
+      <html>
+      <head></head>
+      <body>
+      """ + fmt('<p>%s</p>', 'description') + """
+      """ + fmt('<p><a href="%s">Click for more</a></p>', 'link') + """
+      </body>
+      </html>
+      """
+    )
+    , 'html', 'utf-8')
   msg['Subject'] = '[%s] %s' % (channel.find('title').text,
                                 item.find('title').text)
   return msg
