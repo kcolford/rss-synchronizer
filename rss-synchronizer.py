@@ -17,11 +17,12 @@ import time
 import sys
 import traceback
 import functools
+import getpass
 
 import pymysql as mysql
 import pycurl as curl
 import lxml.etree as etree
-etree.use_global_python_log(etree.PyErrorLog('rss.xmlparser'))
+etree.use_global_python_log(etree.PyErrorLog('xmlparser'))
 
 def has_category(it, category):
   """Return True iff `it` has category `category`."""
@@ -34,7 +35,7 @@ def fetch_url(url):
   # build a standard curl object
   c = curl.Curl()
   c.setopt(curl.ENCODING, '')
-  c.setopt(curl.USERAGENT, 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:44.0) Gecko/20100101 Firefox/44.0')
+  c.setopt(curl.USERAGENT, 'RSS Aggregator')
   c.setopt(curl.FOLLOWLOCATION, True)
   c.setopt(curl.FAILONERROR, True)
   c.setopt(curl.VERBOSE, False)
@@ -46,15 +47,23 @@ def fetch_url(url):
   c.setopt(curl.URL, url)
   c.perform()
 
-  assert data
+  status = c.getinfo(curl.HTTP_CODE)
+  log.log(logging.INFO if status == 200 else logging.ERROR,
+          '%s returned status code %s', url, status)
+  if status != 200:
+    log.error('%s', c.errstr())
+    raise Exception('Failed to fetch reasource at specified url')
+
   return ''.join(data)
   
 def make_message(channel, item):
   """Return an email message out of the item in channel."""
 
   def fmt(template, arg):
-    arg = item.find(arg).text
-    return (template % arg) if arg else ''
+    arga = item.find(arg).text
+    log.debug('source %s has %s value %s', channel.find('title').text,
+              arg, arga)
+    return (template % arga) if arga else ''
 
   msg = EmailMessage(
     (
@@ -71,6 +80,7 @@ def make_message(channel, item):
     , 'html', 'utf-8')
   msg['Subject'] = '[%s] %s' % (channel.find('title').text,
                                 item.find('title').text)
+  log.debug('constructed message with subject %s', msg['Subject'])
   return msg
 
 def aggregate(send_emails=True,
@@ -109,6 +119,7 @@ def aggregate(send_emails=True,
         try:
           last_update_time = next(iter(cursor))[0]
         except StopIteration:
+          log.info('source %s is new and never used before', url)
           last_update_time = time.time()
           cursor.execute("""
           INSERT INTO src_time (source_id, time)
@@ -126,14 +137,14 @@ def aggregate(send_emails=True,
       try:
         data = fetch_url(url)
       except:
-        log.error('failed to fetch reasource at %s', url)
+        log.exception('failed to fetch reasource at %s', url)
         continue
 
       # parse the data
       try:
         rss = etree.fromstring(data)
       except:
-        log.error('failed to parse reasource at %s', url)
+        log.exception('failed to parse reasource at %s', url)
         continue
 
       # collect updates
@@ -178,18 +189,19 @@ def aggregate(send_emails=True,
 
 def main():
   logging.basicConfig()
-  curl.global_init(curl.GLOBAL_DEFAULT)
+  log.setLevel(logging.DEBUG if os.getenv('RSS_DEBUG') else logging.WARN)
   password = os.getenv('RSS_MYSQL_PASSWORD')
   if not password and os.getenv('RSS_MYSQL_PASS_FILE'):
     password = open(os.getenv('RSS_MYSQL_PASS_FILE'), 'r').read()
   aggregate(send_emails=os.getenv('RSS_SEND_EMAILS', 'y') == 'y',
             host=os.getenv('RSS_MYSQL_HOST', 'localhost'),
-            user=os.getenv('RSS_MYSQL_USER', 'rss-config'),
+            unix_socket=os.getenv('RSS_MYSQL_SOCKET',
+                                  '/var/run/mysqld/mysqld.sock'),
+            user=os.getenv('RSS_MYSQL_USER', getpass.getuser()),
             password=password,
             database=os.getenv('RSS_MYSQL_DATABASE', 'rss'))
-  curl.global_cleanup()
 
-log = logging.getLogger('rss')
+log = logging.getLogger()
 
 if __name__ == '__main__':
   main()
