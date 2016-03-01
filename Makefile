@@ -2,6 +2,7 @@ all:
 
 update:
 	git commit -a
+	git push
 	sudo $(MAKE) install
 
 install:
