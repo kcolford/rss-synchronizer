@@ -1,3 +1,5 @@
-# ignore compiled python files
+# .gitignore - files ignored by code
 *.py[co]
 *~
+/.install
+/.update
