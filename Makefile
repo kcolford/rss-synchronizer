@@ -1,7 +1,5 @@
 all:
 
-Makefile: .tracked-files
-
 .tracked-files:
 	git ls-files > $@-t
 	cmp -q $@-t $@ || mv $@-t $@
