@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python -O
 
 """Synchronize RSS feeds and send emails.
 
@@ -83,13 +82,14 @@ def make_message(channel, item):
   log.debug('constructed message with subject %s', msg['Subject'])
   return msg
 
-def aggregate(send_emails=True,
-              max_updates=10,
-              **kwargs):
+def aggregate(send_emails=True, max_updates=10, dbparams={}):
   """Aggregate all configured feeds and send out updates."""
 
+  # fix parameter types
+  max_updates = int(max_updates)
+
   # establish a connection
-  connection = mysql.connect(**kwargs)
+  connection = mysql.connect(**dbparams)
 
   # load configuration data
   config = {}
@@ -189,19 +189,18 @@ def aggregate(send_emails=True,
 
 def main():
   logging.basicConfig()
-  log.setLevel(logging.DEBUG if os.getenv('RSS_DEBUG') else logging.WARN)
-  password = os.getenv('RSS_MYSQL_PASSWORD')
-  if not password and os.getenv('RSS_MYSQL_PASS_FILE'):
-    password = open(os.getenv('RSS_MYSQL_PASS_FILE'), 'r').read()
-  aggregate(send_emails=os.getenv('RSS_SEND_EMAILS', 'y') == 'y',
-            host=os.getenv('RSS_MYSQL_HOST', 'localhost'),
-            unix_socket=os.getenv('RSS_MYSQL_SOCKET',
-                                  '/var/run/mysqld/mysqld.sock'),
-            user=os.getenv('RSS_MYSQL_USER', getpass.getuser()),
-            password=password,
-            database=os.getenv('RSS_MYSQL_DATABASE', 'rss'))
+  if __debug__: log.setLevel(logging.DEBUG)
+  else:         log.setLevel(logging.WARN)
+  aggregate(send_emails=not __debug__,
+            max_updates=os.getenv('RSS_MAX_UPDATES', 10),
+            dbparams={'host': os.getenv('RSS_MYSQL_HOST', 'localhost'),
+                      'user': os.getenv('RSS_MYSQL_USER', 'rss'),
+                      'pass': os.getenv('RSS_MYSQL_PASS'),
+                      'db': os.getenv('RSS_MYSQL_DB', 'rss')})
 
 log = logging.getLogger()
 
 if __name__ == '__main__':
-  main()
+  while True:
+    main()
+    time.sleep(600)
