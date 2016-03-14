@@ -1,4 +1,4 @@
-#!/usr/bin/env python -O
+#!/usr/bin/env python3
 
 """Synchronize RSS feeds and send emails.
 
@@ -7,53 +7,56 @@ Configuration data is stored in local MySQL database.
 """
 
 import os
-import collections
-import rfc822
-import smtplib
-from email.mime.text import MIMEText as EmailMessage
-import logging
-import time
-import sys
-import traceback
-import functools
 import getpass
-
-import pymysql as mysql
-import pycurl as curl
-import lxml.etree as etree
-etree.use_global_python_log(etree.PyErrorLog('xmlparser'))
+import smtplib
+import logging
+import datetime
+from datetime import datetime
+import time
+import email.utils
+import email.mime.text
+import pycurl
+import pymysql
+import lxml.etree
+lxml.etree.use_global_python_log(lxml.etree.PyErrorLog('xmlparser'))
 
 def has_category(it, category):
   """Return True iff `it` has category `category`."""
 
   return category in [None] + [c.text for c in it.findall('category')]
 
+def parse_rfc822(s):
+  """Return a datetime object for RFC822 formatted `s`."""
+
+  return datetime.fromtimestamp(
+    email.utils.mktime_tz(email.utils.parsedate_tz(s)))
+
 def fetch_url(url):
   """Return the content found at url."""
-  
+
   # build a standard curl object
-  c = curl.Curl()
-  c.setopt(curl.ENCODING, '')
-  c.setopt(curl.USERAGENT, 'RSS Aggregator')
-  c.setopt(curl.FOLLOWLOCATION, True)
-  c.setopt(curl.FAILONERROR, True)
-  c.setopt(curl.VERBOSE, False)
-  c.setopt(curl.NOPROGRESS, True)
+  c = pycurl.Curl()
+  c.setopt(pycurl.ENCODING, '')
+  c.setopt(pycurl.USERAGENT, 'RSS Aggregator')
+  c.setopt(pycurl.FOLLOWLOCATION, True)
+  c.setopt(pycurl.FAILONERROR, True)
+  c.setopt(pycurl.VERBOSE, False)
+  c.setopt(pycurl.NOPROGRESS, True)
 
   # pass interesting parameters to it
   data = []
-  c.setopt(curl.WRITEFUNCTION, data.append)
-  c.setopt(curl.URL, url)
+  c.setopt(pycurl.WRITEFUNCTION, data.append)
+  c.setopt(pycurl.URL, url)
   c.perform()
 
-  status = c.getinfo(curl.HTTP_CODE)
-  log.log(logging.INFO if status == 200 else logging.ERROR,
-          '%s returned status code %s', url, status)
+  status = c.getinfo(pycurl.HTTP_CODE)
+  log.debug('%s returned status code %s', url, status)
   if status != 200:
     log.error('%s', c.errstr())
-    raise Exception('Failed to fetch reasource at specified url')
+    log.error('URL %s returned status code %s', url, status)
+    raise Exception('Failed to fetch reasource')
 
-  return ''.join(data)
+  return ''.join(s.decode() for s in data).encode()
   
 def make_message(channel, item):
   """Return an email message out of the item in channel."""
@@ -64,7 +67,7 @@ def make_message(channel, item):
               arg, arga)
     return (template % arga) if arga else ''
 
-  msg = EmailMessage(
+  msg = email.mime.text.MIMEText(
     (
       """<!DOCTYPE html>
       <html>
@@ -89,7 +92,7 @@ def aggregate(send_emails=True, max_updates=10, dbparams={}):
   max_updates = int(max_updates)
 
   # establish a connection
-  connection = mysql.connect(**dbparams)
+  connection = pymysql.connect(**dbparams)
 
   # load configuration data
   config = {}
@@ -99,7 +102,7 @@ def aggregate(send_emails=True, max_updates=10, dbparams={}):
       config[name] = value
 
   # connect to smtp server
-  smtp = smtplib.SMTP('mail.kcolford.com')
+  smtp = smtplib.SMTP(os.getenv('RSS_MAIL_HOST', 'localhost'))
   smtp.starttls()
   smtp.login(config['email_user'], config['email_passwd'])
 
@@ -117,13 +120,14 @@ def aggregate(send_emails=True, max_updates=10, dbparams={}):
         FROM src_time
         WHERE source_id = %s""", [source_id])
         try:
-          last_update_time = next(iter(cursor))[0]
+          last_update_time = datetime.fromtimestamp(
+            next(iter(cursor))[0])
         except StopIteration:
           log.info('source %s is new and never used before', url)
-          last_update_time = time.time()
+          last_update_time = datetime.today()
           cursor.execute("""
           INSERT INTO src_time (source_id, time)
-          VALUES (%s, %s)""", [source_id, last_update_time])
+          VALUES (%s, %s)""", [source_id, last_update_time.timestamp()])
 
       # fetch the email addresses to send to
       with connection as cursor:
@@ -142,8 +146,9 @@ def aggregate(send_emails=True, max_updates=10, dbparams={}):
 
       # parse the data
       try:
-        rss = etree.fromstring(data)
+        rss = lxml.etree.fromstring(data)
       except:
+        log.debug('input was:\n%s', data)
         log.exception('failed to parse reasource at %s', url)
         continue
 
@@ -154,8 +159,7 @@ def aggregate(send_emails=True, max_updates=10, dbparams={}):
       for item in channel.findall('item'):
         if not has_category(item, category):
           continue
-        item_pubtime = item.find('pubDate').text
-        item_pubtime = time.mktime(rfc822.parsedate(item_pubtime))
+        item_pubtime = parse_rfc822(item.find('pubDate').text)
         if item_pubtime <= last_update_time:
           continue
         max_pubtime = max(max_pubtime, item_pubtime)
@@ -180,12 +184,13 @@ def aggregate(send_emails=True, max_updates=10, dbparams={}):
           for r in recipients:
             msg['To'] = r
             smtp.sendmail(msg['From'], msg['To'], msg.as_string())
+            log.info('sent email to %s', r)
 
       # update the last update times for this run
       with connection as cursor:
         cursor.execute("""
         UPDATE src_time SET time = %s
-        WHERE source_id = %s""", [max_pubtime, source_id])
+        WHERE source_id = %s""", [max_pubtime.timestamp(), source_id])
 
 def main():
   logging.basicConfig()
@@ -193,15 +198,16 @@ def main():
   else:         log.setLevel(logging.INFO)
   aggregate(send_emails=not __debug__,
             max_updates=os.getenv('RSS_MAX_UPDATES', 10),
-            dbparams={'host': os.getenv('RSS_MYSQL_HOST', 'db.kcolford.com'),
-                      'user': os.getenv('RSS_MYSQL_USER', 'rss'),
+            dbparams={'host': os.getenv('RSS_MYSQL_HOST', 'localhost'),
+                      'unix_socket': '/var/run/mysqld/mysqld.sock',
+                      'user': os.getenv('RSS_MYSQL_USER', getpass.getuser()),
                       'passwd': os.getenv('RSS_MYSQL_PASS'),
                       'db': os.getenv('RSS_MYSQL_DB', 'rss')})
+  log.info('completed an update at %s', datetime.today())
 
-log = logging.getLogger()
+log = logging.getLogger('rss')
 
 if __name__ == '__main__':
   while True:
     main()
-    log.info('completed an update')
     time.sleep(600)
