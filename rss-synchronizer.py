@@ -99,7 +99,7 @@ def aggregate(send_emails=True, max_updates=10, dbparams={}):
       config[name] = value
 
   # connect to smtp server
-  smtp = smtplib.SMTP('localhost')
+  smtp = smtplib.SMTP('mail.kcolford.com')
   smtp.starttls()
   smtp.login(config['email_user'], config['email_passwd'])
 
@@ -190,12 +190,12 @@ def aggregate(send_emails=True, max_updates=10, dbparams={}):
 def main():
   logging.basicConfig()
   if __debug__: log.setLevel(logging.DEBUG)
-  else:         log.setLevel(logging.WARN)
+  else:         log.setLevel(logging.INFO)
   aggregate(send_emails=not __debug__,
             max_updates=os.getenv('RSS_MAX_UPDATES', 10),
-            dbparams={'host': os.getenv('RSS_MYSQL_HOST', 'localhost'),
+            dbparams={'host': os.getenv('RSS_MYSQL_HOST', 'db.kcolford.com'),
                       'user': os.getenv('RSS_MYSQL_USER', 'rss'),
-                      'pass': os.getenv('RSS_MYSQL_PASS'),
+                      'passwd': os.getenv('RSS_MYSQL_PASS'),
                       'db': os.getenv('RSS_MYSQL_DB', 'rss')})
 
 log = logging.getLogger()
@@ -203,4 +203,5 @@ log = logging.getLogger()
 if __name__ == '__main__':
   while True:
     main()
+    log.info('completed an update')
     time.sleep(600)

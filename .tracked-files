@@ -1,5 +1,0 @@
-.gitignore
-Makefile
-req-apt.txt
-req-pip.txt
-rss-synchronizer.py
