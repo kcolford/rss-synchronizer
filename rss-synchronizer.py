@@ -18,7 +18,6 @@ import email.mime.text
 import pycurl
 import pymysql
 import lxml.etree
-lxml.etree.use_global_python_log(lxml.etree.PyErrorLog('xmlparser'))
 
 def has_category(it, category):
   """Return True iff `it` has category `category`."""
@@ -37,7 +36,7 @@ def fetch_url(url):
   # build a standard curl object
   c = pycurl.Curl()
   c.setopt(pycurl.ENCODING, '')
-  c.setopt(pycurl.USERAGENT, 'RSS Aggregator')
+  c.setopt(pycurl.USERAGENT, config['com.kcolford.rss.curl.user-agent'])
   c.setopt(pycurl.FOLLOWLOCATION, True)
   c.setopt(pycurl.FAILONERROR, True)
   c.setopt(pycurl.VERBOSE, False)
@@ -50,10 +49,10 @@ def fetch_url(url):
   c.perform()
 
   status = c.getinfo(pycurl.HTTP_CODE)
-  log.debug('%s returned status code %s', url, status)
+  logger.debug('%s returned status code %s', url, status)
   if status != 200:
-    log.error('%s', c.errstr())
-    log.error('URL %s returned status code %s', url, status)
+    logger.error('%s', c.errstr())
+    logger.error('URL %s returned status code %s', url, status)
     raise Exception('Failed to fetch reasource')
 
   return ''.join(s.decode() for s in data).encode()
@@ -63,7 +62,7 @@ def make_message(channel, item):
 
   def fmt(template, arg):
     arga = item.find(arg).text
-    log.debug('source %s has %s value %s', channel.find('title').text,
+    logger.debug('source %s has %s value %s', channel.find('title').text,
               arg, arga)
     return (template % arga) if arga else ''
 
@@ -82,29 +81,28 @@ def make_message(channel, item):
     , 'html', 'utf-8')
   msg['Subject'] = '[%s] %s' % (channel.find('title').text,
                                 item.find('title').text)
-  log.debug('constructed message with subject %s', msg['Subject'])
+  logger.debug('constructed message with subject %s', msg['Subject'])
   return msg
 
-def aggregate(send_emails=True, max_updates=10, dbparams={}):
+def aggregate():
   """Aggregate all configured feeds and send out updates."""
 
-  # fix parameter types
-  max_updates = int(max_updates)
-
-  # establish a connection
-  connection = pymysql.connect(**dbparams)
-
-  # load configuration data
-  config = {}
+  # establish the connection and update the config
+  connection = pymysql.connect(host=config['com.kcolford.rss.db.host'],
+                               user=config['com.kcolford.rss.db.user'],
+                               db=config['com.kcolford.rss.db.schm'],
+                               passwd=config['com.kcolford.rss.db.pass'])
   with connection as cursor:
     cursor.execute("""SELECT name, value FROM config""")
     for name, value in cursor:
       config[name] = value
+  logger.setLevel(getattr(logging, config['com.kcolford.rss.loglevel']))
 
   # connect to smtp server
-  smtp = smtplib.SMTP(os.getenv('RSS_MAIL_HOST', 'localhost'))
+  smtp = smtplib.SMTP(config['com.kcolford.rss.smtp.host'])
   smtp.starttls()
-  smtp.login(config['email_user'], config['email_passwd'])
+  smtp.login(config['com.kcolford.rss.smtp.user'],
+             config['com.kcolford.rss.smtp.pass'])
 
   # determine what sources have been updated
   updated_sources = {}
@@ -120,10 +118,9 @@ def aggregate(send_emails=True, max_updates=10, dbparams={}):
         FROM src_time
         WHERE source_id = %s""", [source_id])
         try:
-          last_update_time = datetime.fromtimestamp(
-            next(iter(cursor))[0])
+          last_update_time = datetime.fromtimestamp(next(iter(cursor))[0])
         except StopIteration:
-          log.info('source %s is new and never used before', url)
+          logger.info('source %s is new and never used before', url)
           last_update_time = datetime.today()
           cursor.execute("""
           INSERT INTO src_time (source_id, time)
@@ -141,15 +138,15 @@ def aggregate(send_emails=True, max_updates=10, dbparams={}):
       try:
         data = fetch_url(url)
       except:
-        log.exception('failed to fetch reasource at %s', url)
+        logger.exception('failed to fetch reasource at %s', url)
         continue
 
       # parse the data
       try:
         rss = lxml.etree.fromstring(data)
       except:
-        log.debug('input was:\n%s', data)
-        log.exception('failed to parse reasource at %s', url)
+        logger.debug('input was:\n%s', data)
+        logger.exception('failed to parse reasource at %s', url)
         continue
 
       # collect updates
@@ -163,28 +160,33 @@ def aggregate(send_emails=True, max_updates=10, dbparams={}):
         if item_pubtime <= last_update_time:
           continue
         max_pubtime = max(max_pubtime, item_pubtime)
-        itemstosend.append(make_message(channel, item))
+        itemstosend.append((item_pubtime, make_message(channel, item)))
         
       # don't continue if there's not updates to send
       if not itemstosend:
         continue
 
       # only send if the environment variable allows it
-      if send_emails:
+      if config['com.kcolford.rss.sendemails'] == 'true':
         # stop if there are too many updates, this may be the result of
         # an error
-        if len(itemstosend) > max_updates:
-          log.error('number of updates (%s) exceeds limit (%s)',
-                    len(itemstosend), max_updates)
+        if len(itemstosend) > int(config['com.kcolford.rss.max_updates']):
+          logger.error('number of updates (%s) exceeds limit (%s)',
+                       len(itemstosend),
+                       config['com.kcolford.rss.max_updates'])
           continue
+
+        # make sure we send updates in the order that they were
+        # published
+        itemstosend = [x[1] for x in sorted(itemstosend, key=lambda x: x[0])]
 
         # send out updates
         for msg in itemstosend:
-          msg['From'] = config['email_addr']
+          msg['From'] = config['com.kcolford.rss.smtp.from']
           for r in recipients:
             msg['To'] = r
             smtp.sendmail(msg['From'], msg['To'], msg.as_string())
-            log.info('sent email to %s', r)
+            logger.info('sent email to %s', r)
 
       # update the last update times for this run
       with connection as cursor:
@@ -193,21 +195,23 @@ def aggregate(send_emails=True, max_updates=10, dbparams={}):
         WHERE source_id = %s""", [max_pubtime.timestamp(), source_id])
 
 def main():
-  logging.basicConfig()
-  if __debug__: log.setLevel(logging.DEBUG)
-  else:         log.setLevel(logging.INFO)
-  aggregate(send_emails=not __debug__,
-            max_updates=os.getenv('RSS_MAX_UPDATES', 10),
-            dbparams={'host': os.getenv('RSS_MYSQL_HOST', 'localhost'),
-                      'unix_socket': '/var/run/mysqld/mysqld.sock',
-                      'user': os.getenv('RSS_MYSQL_USER', getpass.getuser()),
-                      'passwd': os.getenv('RSS_MYSQL_PASS'),
-                      'db': os.getenv('RSS_MYSQL_DB', 'rss')})
-  log.info('completed an update at %s', datetime.today())
+  """Run the main routine every 10 minutes."""
 
-log = logging.getLogger('rss')
+  logging.basicConfig()
+  lxml.etree.use_global_python_log(lxml.etree.PyErrorLog('xmlparser'))
+  while True:
+    aggregate(connection, config)
+    logger.info('completed an update at %s', datetime.today())
+    time.sleep(600)
+
+logger = logging.getLogger(__name__)
+
+config = {
+  'com.kcolford.rss.db.host': 'db.kcolford.com',
+  'com.kcolford.rss.db.user': 'rss',
+  'com.kcolford.rss.db.schm': 'rss',
+  'com.kcolford.rss.db.pass': os.getenv('RSS_MYSQL_PASS'),
+}
 
 if __name__ == '__main__':
-  while True:
-    main()
-    time.sleep(600)
+  main()
