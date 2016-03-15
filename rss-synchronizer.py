@@ -19,6 +19,27 @@ import pycurl
 import pymysql
 import lxml.etree
 
+def update_config():
+  """Update the local configuration."""
+
+  global config, logger, connection
+
+  logging.basicConfig()
+  lxml.etree.use_global_python_log(lxml.etree.PyErrorLog('xmlparser'))
+
+  # establish the connection and update the config
+  connection = pymysql.connect(host=config['com.kcolford.rss.db.host'],
+                               user=config['com.kcolford.rss.db.user'],
+                               db=config['com.kcolford.rss.db.schm'],
+                               passwd=config['com.kcolford.rss.db.pass'])
+  config = {}
+  with connection as cursor:
+    cursor.execute("""SELECT name, value FROM config""")
+    for name, value in cursor:
+      config[name] = value
+  logger = logging.getLogger(config['com.kcolford.rss.log.name'])
+  logger.setLevel(getattr(logging, config['com.kcolford.rss.log.level']))
+
 def has_category(it, category):
   """Return True iff `it` has category `category`."""
 
@@ -87,16 +108,7 @@ def make_message(channel, item):
 def aggregate():
   """Aggregate all configured feeds and send out updates."""
 
-  # establish the connection and update the config
-  connection = pymysql.connect(host=config['com.kcolford.rss.db.host'],
-                               user=config['com.kcolford.rss.db.user'],
-                               db=config['com.kcolford.rss.db.schm'],
-                               passwd=config['com.kcolford.rss.db.pass'])
-  with connection as cursor:
-    cursor.execute("""SELECT name, value FROM config""")
-    for name, value in cursor:
-      config[name] = value
-  logger.setLevel(getattr(logging, config['com.kcolford.rss.loglevel']))
+  update_config()
 
   # connect to smtp server
   smtp = smtplib.SMTP(config['com.kcolford.rss.smtp.host'])
@@ -197,15 +209,14 @@ def aggregate():
 def main():
   """Run the main routine every 10 minutes."""
 
-  logging.basicConfig()
-  lxml.etree.use_global_python_log(lxml.etree.PyErrorLog('xmlparser'))
   while True:
-    aggregate(connection, config)
+    update_config()
+    aggregate()
     logger.info('completed an update at %s', datetime.today())
     time.sleep(600)
 
 logger = logging.getLogger(__name__)
-
+connection = None
 config = {
   'com.kcolford.rss.db.host': 'db.kcolford.com',
   'com.kcolford.rss.db.user': 'rss',
