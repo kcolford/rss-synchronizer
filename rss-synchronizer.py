@@ -52,6 +52,7 @@ def update_config():
     logger.addHandler(dbhandler)
   lxml.etree.use_global_python_log(
     lxml.etree.PyErrorLog(logger=logger.getChild('xmlparser')))
+  logger.debug('updated local configuration')
 
 def has_category(it, category):
   """Return True iff `it` has category `category`."""
@@ -97,7 +98,7 @@ def make_message(channel, item):
   def fmt(template, arg):
     arga = item.find(arg).text
     logger.debug('source %s has %s value %s', channel.find('title').text,
-              arg, arga)
+                 arg, arga)
     return (template % arga) if arga else ''
 
   msg = email.mime.text.MIMEText(
@@ -218,6 +219,7 @@ def aggregate():
         cursor.execute("""
         UPDATE src_time SET time = %s
         WHERE source_id = %s""", [max_pubtime.timestamp(), source_id])
+  logger.debug('finished aggregating RSS feeds')
 
 def main():
   """Run the main routine every 10 minutes."""
@@ -225,10 +227,12 @@ def main():
   while True:
     update_config()
     aggregate()
-    logger.info('completed an update at %s', datetime.today())
-    time.sleep(float(config['com.kcolford.rss.waitinterval']))
+    logger.info('completed an update')
+    wait_time = float(config['com.kcolford.rss.waitinterval'])
+    logger.debug('waiting for %s seconds', wait_time)
+    time.sleep(wait_time)
 
-logger = logging.getLogger(__name__)
+logger = None
 connection = None
 config = {
   'com.kcolford.rss.db.host': 'db.kcolford.com',
