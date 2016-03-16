@@ -45,7 +45,6 @@ def update_config():
     cursor.execute("""SELECT name, value FROM config""")
     for name, value in cursor:
       config[name] = value
-  logging.basicConfig()
   logger = logging.getLogger(config['com.kcolford.rss.log.name'])
   logger.setLevel(getattr(logging, config['com.kcolford.rss.log.level']))
   logger.removeHandler(dbhandler)
