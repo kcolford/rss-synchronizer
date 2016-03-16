@@ -20,13 +20,15 @@ import pymysql
 import lxml.etree
 
 class DBHandler(logging.Handler):
+  def __init__(self):
+    logging.Handler.__init__(self)
+    self.setFormatter(logging.Formatter(logging.BASIC_FORMAT))
   def emit(self, record):
     with connection as cursor:
       cursor.execute("""INSERT INTO log (message) VALUE (%s)""",
                      self.format(record))
 
 dbhandler = DBHandler()
-dbhandler.setFormatter(logging.Formatter())
 
 def update_config():
   """Update the local configuration."""
@@ -50,7 +52,7 @@ def update_config():
   if config['com.kcolford.rss.log.usedb'] == 'true':
     logger.addHandler(dbhandler)
   lxml.etree.use_global_python_log(
-    lxml.etree.PyErrorLog(logger.getChild('xmlparser')))
+    lxml.etree.PyErrorLog(logger=logger.getChild('xmlparser')))
 
 def has_category(it, category):
   """Return True iff `it` has category `category`."""
