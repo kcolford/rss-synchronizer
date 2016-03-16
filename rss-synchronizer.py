@@ -19,13 +19,18 @@ import pycurl
 import pymysql
 import lxml.etree
 
+class DBHandler(logging.Handler):
+  def emit(self, record):
+    with connection as cursor:
+      cursor.execute("""INSERT INTO log (message) VALUE (%s)""",
+                     self.format(record))
+
+dbhandler = DBHandler()
+
 def update_config():
   """Update the local configuration."""
 
   global config, logger, connection
-
-  logging.basicConfig()
-  lxml.etree.use_global_python_log(lxml.etree.PyErrorLog('xmlparser'))
 
   # establish the connection and update the config
   connection = pymysql.connect(host=config['com.kcolford.rss.db.host'],
@@ -37,8 +42,13 @@ def update_config():
     cursor.execute("""SELECT name, value FROM config""")
     for name, value in cursor:
       config[name] = value
+  logging.basicConfig()
   logger = logging.getLogger(config['com.kcolford.rss.log.name'])
   logger.setLevel(getattr(logging, config['com.kcolford.rss.log.level']))
+  logger.removeHandler(dbhandler)
+  if config['com.kcolford.rss.log.usedb'] == 'true':
+    logger.addHandler(dbhandler)
+  lxml.etree.use_global_python_log(lxml.etree.PyErrorLog('xmlparser'))
 
 def has_category(it, category):
   """Return True iff `it` has category `category`."""
