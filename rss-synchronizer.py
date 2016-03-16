@@ -26,6 +26,7 @@ class DBHandler(logging.Handler):
                      self.format(record))
 
 dbhandler = DBHandler()
+dbhandler.setFormatter(logging.Formatter())
 
 def update_config():
   """Update the local configuration."""
@@ -48,7 +49,8 @@ def update_config():
   logger.removeHandler(dbhandler)
   if config['com.kcolford.rss.log.usedb'] == 'true':
     logger.addHandler(dbhandler)
-  lxml.etree.use_global_python_log(lxml.etree.PyErrorLog('xmlparser'))
+  lxml.etree.use_global_python_log(
+    lxml.etree.PyErrorLog(logger.getChild('xmlparser')))
 
 def has_category(it, category):
   """Return True iff `it` has category `category`."""
@@ -223,7 +225,7 @@ def main():
     update_config()
     aggregate()
     logger.info('completed an update at %s', datetime.today())
-    time.sleep(600)
+    time.sleep(float(config['com.kcolford.rss.waitinterval']))
 
 logger = logging.getLogger(__name__)
 connection = None
