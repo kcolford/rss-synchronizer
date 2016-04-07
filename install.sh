@@ -1,6 +1,8 @@
 #!/bin/bash
 
-docker stop rss
-docker rm rss
-docker build -t rss `dirname $_`
-docker run -d --name rss rss
+name=rss-synchronizer
+
+docker stop $name
+docker rm $name
+docker build -t $name `dirname $_`
+docker run -d --restart=always --name $name $name
