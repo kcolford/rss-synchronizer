@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Daemon to send RSS updates by email
 
 var emailer = require('nodemailer').createTransport(
