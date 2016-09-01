@@ -2,4 +2,7 @@
 Description=Regular rss-synchronizer update
 
 [Timer]
-OnCalendar=10m
+OnUnitActiveSec=10m
+
+[Install]
+WantedBy=multi-user.target

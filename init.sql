@@ -1,6 +1,3 @@
-PRAGMA foreign_keys=OFF;
-BEGIN TRANSACTION;
-CREATE TABLE sendto (email, url, category, last_update);
 INSERT INTO "sendto" VALUES('kieran@kcolford.com','http://www.wuxiaworld.com/feed/','Skyfire Avenue',NULL);
 INSERT INTO "sendto" VALUES('kieran@kcolford.com','http://totobro.com/feed/',NULL,NULL);
 INSERT INTO "sendto" VALUES('kieran@kcolford.com','http://radianttranslations.com/feed/','The Legend of the Dragon King',NULL);
@@ -14,4 +11,3 @@ INSERT INTO "sendto" VALUES('kieran@kcolford.com','http://mangafox.me/rss/nanats
 INSERT INTO "sendto" VALUES('kieran@kcolford.com','http://mangafox.me/rss/shen_yin_wang_zuo.xml',NULL,NULL);
 INSERT INTO "sendto" VALUES('kieran@kcolford.com','http://mangafox.me/rss/douluo_dalu_ii_jueshui_tangmen.xml',NULL,NULL);
 INSERT INTO "sendto" VALUES('kieran@kcolford.com','http://xkcd.com/rss.xml',NULL,NULL);
-COMMIT;
