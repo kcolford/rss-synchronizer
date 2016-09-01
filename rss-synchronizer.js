@@ -9,7 +9,7 @@ var xml2json = require('xml2json');
 var sqlite3 = require('sqlite3');
 var fs = require('fs');
 
-var db = new sqlite3.Database(process.env.DATABASE || 'rss-synchronizer.db');
+var db = new sqlite3.Database(process.env.DATABASE || 'test.db');
 
 function xml(body) {
   try {
