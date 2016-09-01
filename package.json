@@ -1,0 +1,20 @@
+{
+  "name": "rss-synchronizer",
+  "version": "1.0.0",
+  "description": "Daemon to send RSS updates via email.",
+  "main": "rss-synchronizer.js",
+  "dependencies": {
+    "nodemailer": "^2.5.0",
+    "nodemailer-sendmail-transport": "^1.0.0",
+    "request": "^2.74.0",
+    "sqlite3": "^3.1.4",
+    "xml2json": "^0.10.0"
+  },
+  "devDependencies": {},
+  "private": true,
+  "bin": {
+    "rss-synchronizer": "./rss-synchronizer.js"
+  },
+  "author": "Kieran Colford <kieran@kcolford.com>",
+  "license": "MIT"
+}

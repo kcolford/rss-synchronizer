@@ -1,0 +1,5 @@
+[Unit]
+Description=Regular rss-synchronizer update
+
+[Timer]
+OnCalendar=10m
