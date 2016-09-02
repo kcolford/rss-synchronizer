@@ -66,16 +66,20 @@ function aggregate() {
               emailer.sendMail({
                 from: process.env.FROM || 'RSS <rss-noreply@kcolford.com>',
                 to: row.email,
-                subject: items[i].title || channel.title,
-                html: (items[i].description || '') + '<br/><a href="' + items[i].link + '">click here</a>'
+                subject: items[i].title[0],
+                html: (items[i].description[0] || '') + '<br/><a href="' + items[i].link[0] + '">click here</a>'
               }, function(err, info) {
                 if (err)
                   return console.error(err);
+                console.log('sent email', info);
                 
                 // record the last updated entry, but 
                 db.run(
                   'update sendto set last_update = max(?, last_update) where rowid = ?',
-                  [pubDate, row.rowid]
+                  [pubDate, row.rowid],
+                  function() {
+                    console.log('updated record', arguments);
+                  }
                 );
                 
               });
