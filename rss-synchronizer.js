@@ -74,7 +74,7 @@ function aggregate() {
                 
                 // record the last updated entry, but 
                 db.run(
-                  'update sendto set last_update = ? where rowid = ? and last_update < ?1',
+                  'update sendto set last_update = max(?, last_update) where rowid = ?',
                   [pubDate, row.rowid]
                 );
                 
