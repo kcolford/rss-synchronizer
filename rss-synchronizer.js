@@ -37,7 +37,7 @@ function aggregate() {
           // initialize the date field
           db.run(
             'update sendto set last_update = ? where rowid = ?',
-            [new Date() / 1000, row.rowid]
+            [new Date(), row.rowid]
           );
           
         } else {
@@ -53,7 +53,7 @@ function aggregate() {
             var channel = data.rss[0].channel[0];
             var items = channel.item || [];
             for (var i = 0; i < items.length; i++) {
-              var pubDate = new Date(items[i].pubDate[0]) / 1000;
+              var pubDate = new Date(items[i].pubDate[0]);
 
               // filter by category if it is given
               if (row.category && items[i].category.indexOf(row.category) == -1)
