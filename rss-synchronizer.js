@@ -39,30 +39,37 @@ function aggregate() {
             'update sendto set last_update = ? where rowid = ?',
             [Date.now(), row.rowid]
           );
-          
+
         } else {
 
           request(row.url, {gzip: true}, function(err, response, body) {
             if (err || response.statusCode != 200)
               return console.error('failed to fetch url', row.url);
-            
+
             var data = xml(body);
             if (!data)
               return console.error('failed to parse xml from', row.url);
-            
+
             var channel = data.rss[0].channel[0];
             var items = channel.item || [];
             for (var i = 0; i < items.length; i++) {
-              var pubDate = Date.parse(items[i].pubDate[0]);
 
               // filter by category if it is given
-              if (row.category && items[i].category.indexOf(row.category) == -1)
+              if (row.category &&
+		  items[i].category &&
+		  items[i].category.indexOf(row.category) == -1)
                 continue;
-                  
+
+	      if (!items[i] ||
+		  !items[i].pubDate ||
+		  !items[i].pubDate[0])
+		continue;
+              var pubDate = Date.parse(items[i].pubDate[0]);
+
               // don't fetch something that's old
               if (pubDate <= row.last_update)
                 continue;
-              
+
               emailer.sendMail({
                 from: process.env.FROM || 'RSS <rss-noreply@kcolford.com>',
                 to: row.email,
@@ -72,8 +79,8 @@ function aggregate() {
                 if (err)
                   return console.error(err);
                 console.log('sent email', info);
-                
-                // record the last updated entry, but 
+
+                // record the last updated entry, but
                 db.run(
                   'update sendto set last_update = max(?, last_update) where rowid = ?',
                   [Date.now(), row.rowid],
@@ -81,11 +88,11 @@ function aggregate() {
                     console.log('updated record', arguments);
                   }
                 );
-                
+
               });
             }
           });
-          
+
         }
       }
     );
