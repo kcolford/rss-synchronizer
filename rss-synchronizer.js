@@ -54,16 +54,27 @@ function aggregate() {
             var items = channel.item || [];
             for (var i = 0; i < items.length; i++) {
 
+	      if (!(true &&
+		    items[i] &&
+		    items[i].title &&
+		    items[i].title[0] &&
+		    items[i].pubDate &&
+		    items[i].pubDate[0] &&
+		    items[i].description &&
+		    items[i].description[0] &&
+		    items[i].link &&
+		    itmes[i].link[0] &&
+		    true)) {
+		console.error('invalid item', items[i]);
+		continue;
+	      }
+
               // filter by category if it is given
               if (row.category &&
 		  items[i].category &&
 		  items[i].category.indexOf(row.category) == -1)
                 continue;
 
-	      if (!items[i] ||
-		  !items[i].pubDate ||
-		  !items[i].pubDate[0])
-		continue;
               var pubDate = Date.parse(items[i].pubDate[0]);
 
               // don't fetch something that's old
@@ -74,7 +85,7 @@ function aggregate() {
                 from: process.env.FROM || 'RSS <rss-noreply@kcolford.com>',
                 to: row.email,
                 subject: items[i].title[0],
-                html: (items[i].description[0] || '') + '<br/><a href="' + items[i].link[0] + '">click here</a>'
+                html: items[i].description[0] + '<br/><a href="' + items[i].link[0] + '">click here</a>'
               }, function(err, info) {
                 if (err)
                   return console.error(err);
