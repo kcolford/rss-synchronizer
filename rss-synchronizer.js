@@ -79,7 +79,7 @@ function aggregate() {
 		    items[i].description &&
 		    items[i].description[0] &&
 		    items[i].link &&
-		    itmes[i].link[0] &&
+		    items[i].link[0] &&
 		    true)) {
 		console.error('invalid item', items[i]);
 		continue;
