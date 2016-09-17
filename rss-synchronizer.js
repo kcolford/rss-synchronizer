@@ -43,7 +43,7 @@ function aggregate() {
       'create table if not exists sendto (email, url, category, last_update)'
     );
 
-    //var request = caching_request();
+    var request = caching_request();
     db.each(
       'select *, rowid from sendto',
       function(err, row) {
