@@ -4,12 +4,14 @@
 var emailer = require('nodemailer').createTransport(
   require('nodemailer-sendmail-transport')()
 );
-var request = require('request');
+var request = require('request').defaults({
+  gzip: true
+});
 var xml2json = require('xml2json');
 var sqlite3 = require('sqlite3');
 var fs = require('fs');
 
-var db = new sqlite3.Database(process.env.DATABASE || 'test.db');
+var db = new sqlite3.Database('data.db');
 
 function xml(body) {
   try {
@@ -58,7 +60,7 @@ function aggregate() {
 
 	} else {
 
-	  request(row.url, {gzip: true}, function(err, response, body) {
+	  request(row.url, function(err, response, body) {
 	    if (err || response.statusCode != 200)
 	      return console.error('failed to fetch url', row.url);
 
@@ -129,5 +131,4 @@ function aggregate() {
   });
 }
 
-//setInterval(aggregate, process.env.RSS_INTERVAL);
-aggregate();
+setInterval(aggregate, 10 * 60 * 1000);

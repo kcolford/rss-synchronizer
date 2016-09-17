@@ -1,7 +1,0 @@
-[Unit]
-Description=Send RSS updates over email.
-
-[Service]
-Type=oneshot
-EnvironmentFile=/etc/rss-synchronizer.conf
-ExecStart=/usr/bin/rss-synchronizer.js

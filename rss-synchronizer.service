@@ -1,0 +1,10 @@
+[Unit]
+Description=Send RSS updates over email.
+After=multi-user.target
+
+[Service]
+ExecStart=/usr/bin/rss-synchronizer
+WorkingDirectory=/var/lib/rss-synchronizer/
+
+[Install]
+WantedBy=multi-user.target
