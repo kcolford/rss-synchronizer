@@ -11,7 +11,18 @@ var xml2json = require('xml2json');
 var sqlite3 = require('sqlite3');
 var fs = require('fs');
 
-var db = new sqlite3.Database('data.db');
+var db = (function(){
+  var db = new sqlite3.Database('data.db');
+  db.serialize();
+  db.run('create table if not exists sendto (email, url, category, last_update)');
+  db.parallelize();
+  return {
+    serialize: db.serialize.bind(db),
+    parallelize: db.parallelize.bind(db),
+    targets: db.prepare('select *, rowid as id from sendto'),
+    update_time:db.prepare('update sendto set last_update = max(?2, ifnull(last_update, 0)) where rowid = ?1')
+  };
+})();
 
 function xml(body) {
   try {
@@ -37,97 +48,78 @@ function caching_request() {
 }
 
 function aggregate() {
+  var request = caching_request();
+  db.targets.each(function(err, row) {
+    if (err)
+      return console.error('failed to fetch data from database');
 
-  db.serialize(function() {
-    db.run(
-      'create table if not exists sendto (email, url, category, last_update)'
-    );
+    if (!row.last_update) {
 
-    var request = caching_request();
-    db.each(
-      'select *, rowid from sendto',
-      function(err, row) {
-	if (err)
-	  return console.error('failed to fetch data from database');
+      // initialize the date field
+      db.update_time.run(row.id, Date.now());
 
-	if (!row.last_update) {
+    } else {
 
-	  // initialize the date field
-	  db.run(
-	    'update sendto set last_update = ? where rowid = ?',
-	    [Date.now(), row.rowid]
-	  );
+      request(row.url, function(err, response, body) {
+	if (err || response.statusCode != 200)
+	  return console.error('failed to fetch url', row.url);
 
-	} else {
+	var data = xml(body);
+	if (!data)
+	  return console.error('failed to parse xml from', row.url);
 
-	  request(row.url, function(err, response, body) {
-	    if (err || response.statusCode != 200)
-	      return console.error('failed to fetch url', row.url);
+	var channel = data.rss[0].channel[0];
+	var items = channel.item || [];
+	for (var i = 0; i < items.length; i++) {
 
-	    var data = xml(body);
-	    if (!data)
-	      return console.error('failed to parse xml from', row.url);
+	  if (!(true &&
+		items[i] &&
+		items[i].title &&
+		items[i].title[0] &&
+		items[i].pubDate &&
+		items[i].pubDate[0] &&
+		items[i].description &&
+		items[i].description[0] &&
+		items[i].link &&
+		items[i].link[0] &&
+		true)) {
+	    console.error('invalid item', items[i]);
+	    continue;
+	  }
 
-	    var channel = data.rss[0].channel[0];
-	    var items = channel.item || [];
-	    for (var i = 0; i < items.length; i++) {
+	  // filter by category if it is given
+	  if (row.category &&
+	      items[i].category &&
+	      items[i].category.indexOf(row.category) == -1)
+	    continue;
 
-	      if (!(true &&
-		    items[i] &&
-		    items[i].title &&
-		    items[i].title[0] &&
-		    items[i].pubDate &&
-		    items[i].pubDate[0] &&
-		    items[i].description &&
-		    items[i].description[0] &&
-		    items[i].link &&
-		    items[i].link[0] &&
-		    true)) {
-		console.error('invalid item', items[i]);
-		continue;
-	      }
+	  var pubDate = Date.parse(items[i].pubDate[0]);
 
-	      // filter by category if it is given
-	      if (row.category &&
-		  items[i].category &&
-		  items[i].category.indexOf(row.category) == -1)
-		continue;
+	  // don't fetch something that's old
+	  if (pubDate <= row.last_update)
+	    continue;
 
-	      var pubDate = Date.parse(items[i].pubDate[0]);
+	  if (typeof items[i].description[0] === 'object')
+	    items[i].description[0] = JSON.stringify(items[i].description[0]);
 
-	      // don't fetch something that's old
-	      if (pubDate <= row.last_update)
-		continue;
+	  emailer.sendMail({
+	    from: process.env.FROM || 'RSS <rss-noreply@kcolford.com>',
+	    to: row.email,
+	    subject: items[i].title[0],
+	    html: items[i].description[0] + '<br/><a href="' + items[i].link[0] + '">click here</a>'
+	  }, function(err, info) {
+	    if (err)
+	      return console.error(err);
+	    console.log('sent email', items[i]);
 
-	      if (typeof items[i].description[0] === 'object')
-		items[i].description[0] = JSON.stringify(items[i].description[0]);
+	    // record the last updated entry, but
+	    db.update_time.run(row.id, Date.now());
 
-	      emailer.sendMail({
-		from: process.env.FROM || 'RSS <rss-noreply@kcolford.com>',
-		to: row.email,
-		subject: items[i].title[0],
-		html: items[i].description[0] + '<br/><a href="' + items[i].link[0] + '">click here</a>'
-	      }, function(err, info) {
-		if (err)
-		  return console.error(err);
-		console.log('sent email', items[i]);
-
-		// record the last updated entry, but
-		db.run(
-		  'update sendto set last_update = max(?, last_update) where rowid = ?',
-		  [Date.now(), row.rowid],
-		  function() {
-		    console.log('updated record', arguments);
-		  }
-		);
-
-	      });
-	    }
 	  });
-
 	}
-      }
-    );
+      });
+
+    }
   });
 }
 
