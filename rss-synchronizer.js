@@ -108,7 +108,7 @@ function aggregate() {
 	      }, function(err, info) {
 		if (err)
 		  return console.error(err);
-		console.log('sent email', info);
+		console.log('sent email', items[i]);
 
 		// record the last updated entry, but
 		db.run(
