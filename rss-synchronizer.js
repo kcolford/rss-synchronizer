@@ -97,6 +97,9 @@ function aggregate() {
 	      if (pubDate <= row.last_update)
 		continue;
 
+	      if (typeof items[i].description[0] === 'object')
+		items[i].description[0] = JSON.stringify(items[i].description[0]);
+
 	      emailer.sendMail({
 		from: process.env.FROM || 'RSS <rss-noreply@kcolford.com>',
 		to: row.email,
