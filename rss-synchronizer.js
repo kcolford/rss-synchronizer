@@ -56,9 +56,11 @@ function aggregate() {
     if (!row.last_update) {
 
       // initialize the date field
-      db.update_time.run(row.id, Date.now());
+      db.update_time.run(row.id, new Date());
 
     } else {
+
+      var last_update = new Date(row.last_update);
 
       request(row.url, function(err, response, body) {
 	if (err || response.statusCode != 200)
@@ -95,10 +97,10 @@ function aggregate() {
 	      item.category.indexOf(row.category) == -1)
 	    continue;
 
-	  var pubDate = Date.parse(item.pubDate[0]);
+	  var pubDate = new Date(item.pubDate[0]);
 
 	  // don't fetch something that's old
-	  if (pubDate <= row.last_update)
+	  if (pubDate <= last_update)
 	    continue;
 
 	  if (typeof item.description[0] === 'object')
@@ -115,7 +117,7 @@ function aggregate() {
 	    console.log('sent email', item);
 
 	    // record the last updated entry, but
-	    db.update_time.run(row.id, Date.now());
+	    db.update_time.run(row.id, new Date());
 	    console.log('updating', row);
 
 	  });
