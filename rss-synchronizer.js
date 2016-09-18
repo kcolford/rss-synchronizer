@@ -72,7 +72,7 @@ function aggregate() {
 	var items = channel.item || [];
 	for (var i = 0; i < items.length; i++) {
 
-	  var item = items[i];
+	  let item = items[i];
 
 	  if (!(true &&
 		item &&
