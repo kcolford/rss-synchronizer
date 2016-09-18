@@ -116,6 +116,7 @@ function aggregate() {
 
 	    // record the last updated entry, but
 	    db.update_time.run(row.id, Date.now());
+	    console.log('updating', row);
 
 	  });
 	}
@@ -125,4 +126,5 @@ function aggregate() {
   });
 }
 
+aggregate();
 setInterval(aggregate, 10 * 60 * 1000);
