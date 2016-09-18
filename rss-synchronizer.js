@@ -72,45 +72,47 @@ function aggregate() {
 	var items = channel.item || [];
 	for (var i = 0; i < items.length; i++) {
 
+	  var item = items[i];
+
 	  if (!(true &&
-		items[i] &&
-		items[i].title &&
-		items[i].title[0] &&
-		items[i].pubDate &&
-		items[i].pubDate[0] &&
-		items[i].description &&
-		items[i].description[0] &&
-		items[i].link &&
-		items[i].link[0] &&
+		item &&
+		item.title &&
+		item.title[0] &&
+		item.pubDate &&
+		item.pubDate[0] &&
+		item.description &&
+		item.description[0] &&
+		item.link &&
+		item.link[0] &&
 		true)) {
-	    console.error('invalid item', items[i]);
+	    console.error('invalid item', item);
 	    continue;
 	  }
 
 	  // filter by category if it is given
 	  if (row.category &&
-	      items[i].category &&
-	      items[i].category.indexOf(row.category) == -1)
+	      item.category &&
+	      item.category.indexOf(row.category) == -1)
 	    continue;
 
-	  var pubDate = Date.parse(items[i].pubDate[0]);
+	  var pubDate = Date.parse(item.pubDate[0]);
 
 	  // don't fetch something that's old
 	  if (pubDate <= row.last_update)
 	    continue;
 
-	  if (typeof items[i].description[0] === 'object')
-	    items[i].description[0] = JSON.stringify(items[i].description[0]);
+	  if (typeof item.description[0] === 'object')
+	    item.description[0] = JSON.stringify(item.description[0]);
 
 	  emailer.sendMail({
 	    from: process.env.FROM || 'RSS <rss-noreply@kcolford.com>',
 	    to: row.email,
-	    subject: items[i].title[0],
-	    html: items[i].description[0] + '<br/><a href="' + items[i].link[0] + '">click here</a>'
+	    subject: item.title[0],
+	    html: item.description[0] + '<br/><a href="' + item.link[0] + '">click here</a>'
 	  }, function(err, info) {
 	    if (err)
 	      return console.error(err);
-	    console.log('sent email', items[i]);
+	    console.log('sent email', item);
 
 	    // record the last updated entry, but
 	    db.update_time.run(row.id, Date.now());
