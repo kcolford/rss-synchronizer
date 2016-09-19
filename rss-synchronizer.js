@@ -78,6 +78,7 @@ function aggregate() {
 	    if (err)
 	      return console.error('failed to fetch url with browser', row.url);
 	    parseAndRun(body);
+	  });
 	} else {
 	  parseAndRun(body);
 	}
