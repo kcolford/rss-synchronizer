@@ -4,6 +4,7 @@
   "description": "Daemon to send RSS updates via email.",
   "main": "rss-synchronizer.js",
   "dependencies": {
+    "lodash": "^4.15.0",
     "nodemailer": "^2.5.0",
     "nodemailer-sendmail-transport": "^1.0.0",
     "request": "^2.74.0",
