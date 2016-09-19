@@ -45,7 +45,7 @@ function browser_request(url, cb) {
     cb(null, output);
   });
   child.on('error', function(err) {
-    console.error('could not spawn phantomjs', err);
+    console.error('could not spawn phantomjs');
   });
 }    
 
