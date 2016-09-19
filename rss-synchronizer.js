@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 // Daemon to send RSS updates by email
 
-var emailer = require('nodemailer').createTransport(
+let emailer = require('nodemailer').createTransport(
   require('nodemailer-sendmail-transport')()
 );
-var request = require('request').defaults({
+let request = require('request').defaults({
   gzip: true
 });
-var xml2json = require('xml2json');
-var sqlite3 = require('sqlite3');
-var fs = require('fs');
+let xml2json = require('xml2json');
+let sqlite3 = require('sqlite3');
+let fs = require('fs');
 
-var db = (function(){
-  var db = new sqlite3.Database('data.db');
+let db = (function(){
+  let db = new sqlite3.Database('data.db');
   db.serialize();
   db.run('create table if not exists sendto (email, url, category, last_update)');
   db.parallelize();
@@ -34,8 +34,8 @@ function xml(body) {
 }
 
 function caching_request() {
-  var request_cache = {};
-  var old_request = request;
+  let request_cache = {};
+  let old_request = request;
   return function(url, opts, cb) {
     if (url in request_cache) {
       cb.apply(null, request_cache[url]);
@@ -48,7 +48,7 @@ function caching_request() {
 }
 
 function aggregate() {
-  var request = caching_request();
+  let request = caching_request();
   db.targets.each(function(err, row) {
     if (err)
       return console.error('failed to fetch data from database');
@@ -64,13 +64,13 @@ function aggregate() {
 	if (err || response.statusCode != 200)
 	  return console.error('failed to fetch url', row.url);
 
-	var data = xml(body);
+	let data = xml(body);
 	if (!data)
 	  return console.error('failed to parse xml from', row.url);
 
-	var channel = data.rss[0].channel[0];
-	var items = channel.item || [];
-	for (var i = 0; i < items.length; i++) {
+	let channel = data.rss[0].channel[0];
+	let items = channel.item || [];
+	for (let i = 0; i < items.length; i++) {
 
 	  let item = items[i];
 
@@ -95,14 +95,11 @@ function aggregate() {
 	      item.category.indexOf(row.category) == -1)
 	    continue;
 
-	  var pubDate = Date.parse(item.pubDate[0]) / 1000;
+	  let pubDate = Date.parse(item.pubDate[0]) / 1000;
 
 	  // don't fetch something that's old
 	  if (pubDate <= row.last_update)
 	    continue;
-
-	  if (typeof item.description[0] === 'object')
-	    item.description[0] = JSON.stringify(item.description[0]);
 
 	  emailer.sendMail({
 	    from: process.env.FROM || 'RSS <rss-noreply@kcolford.com>',
@@ -114,8 +111,8 @@ function aggregate() {
 	      return console.error(err);
 	    console.log('sent email', item);
 
-	    // record the last updated entry, but
-	    db.update_time.run(row.id, Date.now() / 1000);
+	    // record the last updated entry
+	    db.update_time.run(row.id, pubDate);
 	    console.log('updating', row);
 
 	  });
