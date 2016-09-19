@@ -89,8 +89,7 @@ function aggregate() {
 	    return console.error('failed to parse xml from', row.url);
 	  
 	  var channel = data.rss[0].channel[0];
-	  var items = channel.item || [];
-	  _.map(items, function(item) {
+	  _.map(channel.item || [], function(item) {
 	    
 	    if (!(true &&
 		  item &&
@@ -104,20 +103,20 @@ function aggregate() {
 		  item.link[0] &&
 		  true)) {
 	      console.error('invalid item', item);
-	      continue;
+	      return;
 	    }
 	    
 	    // filter by category if it is given
 	    if (row.category &&
 		item.category &&
 		item.category.indexOf(row.category) == -1)
-	      continue;
+	      return;
 
 	    var pubDate = Date.parse(item.pubDate[0]) / 1000;
 	    
 	    // don't fetch something that's old
 	    if (pubDate <= row.last_update)
-	      continue;
+	      return;
 	    
 	    emailer.sendMail({
 	      from: process.env.FROM || 'RSS <rss-noreply@kcolford.com>',
