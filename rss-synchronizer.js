@@ -44,6 +44,9 @@ function browser_request(url, cb) {
     console.log('finished phantomjs');
     cb(null, output);
   });
+  child.on('error', function(err) {
+    console.error('could not spawn phantomjs', err);
+  });
 }    
 
 function caching_request() {
