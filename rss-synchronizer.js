@@ -34,12 +34,14 @@ function xml(body) {
 }
 
 function browser_request(url, cb) {
-  var child = child_process.spawn('phantomjs', [__dirpath + '/phantomjs.js', url]);
+  console.log('spawning phantomjs process');
+  var child = child_process.spawn('phantomjs', [__dirname + '/phantomjs.js', url]);
   var output = '';
   child.stdout.on('data', function(data) {
     output += data;
   });
   child.on('exit', function(code, signal) {
+    console.log('finished phantomjs');
     cb(null, output);
   });
 }    
@@ -65,12 +67,8 @@ function aggregate() {
       return console.error('failed to fetch data from database');
 
     if (!row.last_update) {
-
-      // initialize the date field
       db.update_time.run(row.id, Date.now() / 1000);
-
     } else {
-
       request(row.url, function(err, response, body) {
 	if (err || response.statusCode != 200) {
 	  console.error('failed to fetch url', row.url);
@@ -131,7 +129,6 @@ function aggregate() {
 	      // record the last updated entry
 	      db.update_time.run(row.id, pubDate);
 	      console.log('updating', row);
-	      
 	    });
 	  });
 	}
