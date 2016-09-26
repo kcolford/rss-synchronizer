@@ -12,11 +12,21 @@ module.exports = function(url) {
           return page.open(url)
             .then(status => {
               console.log(status);
-              return timer.setTimeout(5 * 1000); // wait 5 sec
+	      // let the page resolve itself before we dump the
+	      // content.
+              return timer.setTimeout(6 * 1000);
             })
             .then(() => {
               return page.property('content');
             })
+	    .then(out => {
+	      page.close();
+	      return out;
+	    })
+	    .catch(err => {
+	      page.close();
+	      throw err;
+	    })
           ;
         })
         .then(out => {
@@ -30,13 +40,11 @@ module.exports = function(url) {
       ;
     })
     .catch(err => {
-      console.error('phantomjs failed to get the requested resource',
-		    err,
-		    'falling back on basic http request');
+      console.error(err);
       return new Promise((resolve, reject) => {
 	request(url, {gzip: true}, (err, response, body) => {
 	  if (err || response.statusCode == 200)
-	    return reject(err || response);
+	    return reject(err || 'status code was not 200');
 	  resolve(body);
 	});
       });

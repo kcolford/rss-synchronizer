@@ -13,7 +13,7 @@ module.exports = function db(opt) {
 
   this.getTargets = function() {
     return new Promise(function(resolve, reject) {
-      db.all('select email, url, category, last_update as time, rowid as id from sendto', function(err, rows) {
+      db.all('select email, url, category, last_update as time, rowid as id from sendto', (err, rows) => {
         if (err) return reject(err);
         resolve(rows);
       });
@@ -22,7 +22,7 @@ module.exports = function db(opt) {
 
   this.setTime = function(id, time) {
     return new Promise(function(resolve, reject) {
-      db.run('update sendto set last_update = ? where rowid = ?', [time, id], function(err) {
+      db.run('update sendto set last_update = ? where rowid = ?', [time, id], err => {
         if (err) return reject(err);
         resolve();
       });

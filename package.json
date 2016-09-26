@@ -2,7 +2,6 @@
   "name": "rss-synchronizer",
   "version": "1.0.0",
   "description": "Daemon to send RSS updates via email.",
-  "main": "lib/index.js",
   "dependencies": {
     "lodash": "^4.15.0",
     "nodemailer": "^2.5.0",
@@ -18,5 +17,5 @@
     "rss-synchronizer": "./bin.js"
   },
   "author": "Kieran Colford <kieran@kcolford.com>",
-  "license": "MIT"
+  "license": "GPL"
 }
