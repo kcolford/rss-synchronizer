@@ -3,6 +3,7 @@ Description=Send RSS updates over email
 After=multi-user.target
 
 [Service]
+Environment=DEBUG=*
 ExecStart=/usr/bin/rss-synchronizer
 WorkingDirectory=/var/lib/rss-synchronizer/
 
