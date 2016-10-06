@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Daemon to send RSS updates via email.",
   "dependencies": {
+    "debug": "^2.2.0",
     "lodash": "^4.15.0",
     "nodemailer": "^2.5.0",
     "nodemailer-sendmail-transport": "^1.0.0",
@@ -14,7 +15,7 @@
   "devDependencies": {},
   "private": true,
   "bin": {
-    "rss-synchronizer": "./bin.js"
+    "rss-synchronizer": "./lib/service.js"
   },
   "author": "Kieran Colford <kieran@kcolford.com>",
   "license": "GPL"
