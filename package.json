@@ -18,5 +18,5 @@
     "rss-synchronizer": "./bin/rss-synchronizer.js"
   },
   "author": "Kieran Colford <kieran@kcolford.com>",
-  "license": "GPL"
+  "license": "UNLICENSED"
 }
